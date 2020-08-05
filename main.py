@@ -20,24 +20,32 @@ if TERMCOLOR:
 
 pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)
+pd.set_option('max_colwidth', 500)
 pd.set_option('display.width', 10000)
 
 
 CONTRACTION_MAP = {
     "ain`t": "is not",
     "aren`t": "are not",
+    "are`t": "are not",
     "can`t": "cannot",
     "can`t`ve": "cannot have",
     "`cause": "because",
     "could`ve": "could have",
     "couldn`t": "could not",
+    "could`t": "could not",
     "couldn`t`ve": "could not have",
     "didn`t": "did not",
+    "did`t": "did not",
     "doesn`t": "does not",
+    "does`t": "does not",
     "don`t": "do not",
+    "don`": "do not",
     "hadn`t": "had not",
+    "had`t": "had not",
     "hadn`t`ve": "had not have",
     "hasn`t": "has not",
+    "has`t": "has not",
     "haven`t": "have not",
     "he`d": "he would",
     "he`d`ve": "he would have",
@@ -60,6 +68,7 @@ CONTRACTION_MAP = {
     "i`ll": "i will",
     "i`ll`ve": "i will have",
     "i`m": "i am",
+    "in`t": "is not",
     "i`ve": "i have",
     "isn`t": "is not",
     "it`d": "it would",
@@ -70,12 +79,16 @@ CONTRACTION_MAP = {
     "let`s": "let us",
     "ma`am": "madam",
     "mayn`t": "may not",
+    "may`t": "may not",
     "might`ve": "might have",
     "mightn`t": "might not",
+    "might`t": "might not",
     "mightn`t`ve": "might not have",
     "must`ve": "must have",
     "mustn`t": "must not",
+    "must`t": "must not",
     "mustn`t`ve": "must not have",
+    "`nd": "and",
     "needn`t": "need not",
     "needn`t`ve": "need not have",
     "o`clock": "of the clock",
@@ -91,6 +104,7 @@ CONTRACTION_MAP = {
     "she`s": "she is",
     "should`ve": "should have",
     "shouldn`t": "should not",
+    "should`t": "should not",
     "shouldn`t`ve": "should not have",
     "so`ve": "so have",
     "so`s": "so as",
@@ -106,8 +120,19 @@ CONTRACTION_MAP = {
     "they`ll`ve": "they will have",
     "they`re": "they are",
     "they`ve": "they have",
+    "`til": "until",
     "to`ve": "to have",
+    "`twas": "it was",
+    "`tis": "it is",
+    "u`d": "you would",
+    "u`d": "you would",
+    "u`d`ve": "you would have",
+    "u`ll": "you will",
+    "u`ll`ve": "you will have",
+    "u`re": "you are",
+    "u`ve": "you have",
     "wasn`t": "was not",
+    "was`t": "was not",
     "we`d": "we would",
     "we`d`ve": "we would have",
     "we`ll": "we will",
@@ -136,6 +161,7 @@ CONTRACTION_MAP = {
     "won`t`ve": "will not have",
     "would`ve": "would have",
     "wouldn`t": "would not",
+    "would`t": "would not",
     "wouldn`t`ve": "would not have",
     "y`all": "you all",
     "y`all`d": "you all would",
@@ -148,6 +174,7 @@ CONTRACTION_MAP = {
     "you`ll`ve": "you will have",
     "you`re": "you are",
     "you`ve": "you have",
+    "ya`ll" : "you all"
 }
 
 
@@ -224,15 +251,53 @@ def spelling_correction(text):
     return text
 
 
+def remove_pattern(input_txt, pattern="@[\w]*"):
+    r = re.findall(pattern, input_txt)
+    for i in r:
+        input_txt = re.sub(re.escape(i), ' ', input_txt)
+
+    return input_txt
+
+
 def basic_preprocess_raw_text(corpus):
+    a = time.time()
     # it makes the most sense to apply the corrections in this sequence
-    print('correcting spelling')
+
+    # # vectorize the apply function
+    # print('removing handles')
+    # corpus = pd.Series(np.vectorize(remove_pattern)(corpus, "@[\w]*"))
+    # print('correcting spelling')
+    # corpus = pd.Series(np.vectorize(spelling_correction)(corpus))
+    # # corpus = corpus.apply(spelling_correction)
+    # print('expanding contractions')
+    # # corpus = corpus.apply(expand_contraction)
+    # corpus = pd.Series(np.vectorize(expand_contraction)(corpus))
+    # print('removing punctuation')
+    # corpus = pd.Series(np.vectorize(remove_pattern)(corpus, "[`][a-zA-Z]*"))
+    # corpus = pd.Series(np.vectorize(remove_pattern)(corpus, "[^a-zA-Z^\s]*"))
+    # print('lemmatizing')
+    # # corpus = corpus.apply(lemmatize_text)
+    # corpus = pd.Series(np.vectorize(lemmatize_text)(corpus))
+    # # print(corpus)
+
+
+    # remove URLs
+    corpus = corpus.apply(remove_pattern, pattern='http\S+')
+    # remove non-ascii characters
+    corpus = corpus.apply(lambda x: x.encode('ascii', 'ignore').decode())
+    # remove handles
+    corpus = corpus.apply(remove_pattern, pattern="@[\w]*")
+    # spell check
     corpus = corpus.apply(spelling_correction)
-    print('expanding contractions')
+    # expand contracted words
     corpus = corpus.apply(expand_contraction)
-    print('lemmatizing')
+    # remove remaining apostophe pieces
+    corpus = corpus.apply(remove_pattern, pattern="[`][a-z]*")
+    # lemmatize
     corpus = corpus.apply(lemmatize_text)
-    # print(corpus)
+    # remove 1 or two letter words
+    corpus = corpus.apply(lambda x: re.compile(r'\W*\b\w{1,3}\b').sub('', x))
+    print('\t.')
 
     return corpus
 
@@ -248,10 +313,11 @@ def get_top_n_words(corpus, n=None, ngram_range=(1, 1)):
 
 def eda(train, test, *args):
     printm('Performing exploratory data analysis ... ', color='green', switch=TERMCOLOR)
-    train = train.sample(frac=0.01, replace=True, random_state=42)
+    # train = train.sample(frac=0.01, replace=True, random_state=42)
+    train = train.sample(frac=0.05, replace=True)
     # printm(train.describe())
     # print(test.describe())
-    print(train.head(50))
+    # print(train.head(50))
     train = train.dropna()
     # print(train.isna().sum())
     # print(test.head())
@@ -262,11 +328,9 @@ def eda(train, test, *args):
     # printm('How many textIDs are common : ',len(set(test.textID.values).intersection(set(train.textID.values))))
 
     # basic text preprocessing in parallel
-    a=time.time()
     train['text_processed'] = parallelize_dataframe(train['text'], basic_preprocess_raw_text)
-    # print(time.time()-a,' seconds', (time.time()-a)*100/60, ' estimated')
-    print(time.time() - a, ' seconds')
-    print(train.head())
+    # train['text_processed'] = basic_preprocess_raw_text(train['text'])
+
 
     var_text = 'text_processed'
 
@@ -361,9 +425,14 @@ def eda(train, test, *args):
     for ax in fig.axes:
         plt.sca(ax)
         plt.xticks(rotation=90)
-    plt.show()
 
-    print(train.shape, train.textID.nunique())
+    plt.show()
+    # print(trlain.shape, train.textID.nunique())
+    print(train.head(100))
+    # txt = train['text_processed'].values
+    # for item in txt:
+    #     if "`" in item:
+    #         print(item)
 
 
 
